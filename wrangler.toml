@@ -55,3 +55,6 @@ OPERATOR_DID = "did:plc:zn65gh5rul6g53vapd5li5kr" # andysmith.ai
 #
 # Local development only (put in .dev.vars, never in production):
 #   DEV_AUTH_BYPASS = "1"  skips the Cf-Access-Jwt-Assertion check for `wrangler dev`
+
+[observability]
+enabled = true

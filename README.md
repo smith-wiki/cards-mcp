@@ -48,6 +48,12 @@ check locally — **development only; never set it in production**. Workers AI r
 (needs `wrangler login`) and Vectorize is not available in local mode, so search and indexing
 only work against deployed resources.
 
+`npm run smoke` checks the deployed Worker without side effects: Access challenge and OAuth
+metadata, then — with an Access service token in `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET`
+— initialize, tools/list, get_cards (D1), search_cards (Workers AI + Vectorize), and a create_card
+that must be rejected. The Access application needs a Service Auth policy for that token.
+Runtime logs: Worker → Observability (enabled in `wrangler.toml`).
+
 ## Provisioning
 
 Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitHub
