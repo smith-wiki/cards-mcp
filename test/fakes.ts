@@ -63,7 +63,8 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
     },
     async query(query: number[], options: VectorizeQueryOptions = {}) {
       const matches = [...vectors.values()]
-        .filter((item) => !options.namespace || item.namespace === options.namespace)
+        // Strictest reading of Vectorize: a query without a namespace sees only vectors without one.
+        .filter((item) => item.namespace === options.namespace)
         .map((item) => ({
           id: item.id,
           score: (item.values as number[]).reduce((sum, value, i) => sum + value * query[i], 0),

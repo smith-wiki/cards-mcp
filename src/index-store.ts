@@ -105,13 +105,17 @@ export async function searchCards(
   limit: number,
 ): Promise<CardSummary[]> {
   const [vector] = await embed(env, [query]);
-  const matches = await env.VECTORS.query(vector, {
-    // Each Card has up to two vectors; over-fetch so dedupe still fills the limit.
-    topK: Math.min(100, limit * 2),
-    ...(author ? { namespace: author } : {}),
-  });
+  // Every vector lives in its author's namespace. Query each namespace explicitly rather
+  // than relying on how Vectorize treats a query without one.
+  const namespaces: Author[] = author ? [author] : ["agent", "operator"];
+  const results = await Promise.all(
+    namespaces.map((namespace) =>
+      // Each Card has up to two vectors; over-fetch so dedupe still fills the limit.
+      env.VECTORS.query(vector, { topK: Math.min(100, limit * 2), namespace }),
+    ),
+  );
   const best = new Map<string, number>();
-  for (const match of matches.matches) {
+  for (const match of results.flatMap((result) => result.matches)) {
     const id = match.id.split("#")[0];
     if (!best.has(id) || best.get(id)! < match.score) best.set(id, match.score);
   }

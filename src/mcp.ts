@@ -122,7 +122,14 @@ export function createServer(env: Env): McpServer {
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ query, author, limit }) => result({ cards: await searchCards(env, query, author, limit) }),
+    async ({ query, author, limit }) => {
+      try {
+        return result({ cards: await searchCards(env, query, author, limit) });
+      } catch (error) {
+        console.error("search_cards failed", error);
+        return toolError(`Search failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
   );
 
   server.registerTool(
@@ -136,7 +143,14 @@ export function createServer(env: Env): McpServer {
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ ids, full }) => result(await getCards(env, [...new Set(ids)], full)),
+    async ({ ids, full }) => {
+      try {
+        return result(await getCards(env, [...new Set(ids)], full));
+      } catch (error) {
+        console.error("get_cards failed", error);
+        return toolError(`Reading Cards failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
   );
 
   return server;
