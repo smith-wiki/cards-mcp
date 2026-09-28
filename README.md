@@ -82,8 +82,8 @@ Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitH
    - one Allow policy whose only include rule is the Operator's email address;
    - Advanced settings: turn on Managed OAuth and dynamic client registration with the allowed
      redirect URI `https://chatgpt.com/connector_platform_oauth_redirect`;
-   - then set on the Worker (text variables): `ACCESS_TEAM_DOMAIN` = `<team>.cloudflareaccess.com`,
-     `ACCESS_AUD` = the application's AUD tag. `keep_vars = true` keeps them across deploys.
+   - then add Worker secrets `ACCESS_TEAM_DOMAIN` = `<team>.cloudflareaccess.com` and
+     `ACCESS_AUD` = the application's AUD tag (secrets survive deploys; plain vars would not).
 
    Until both are set every `/mcp` request gets 401. The Worker checks `Cf-Access-Jwt-Assertion`
    (RS256, keys from `https://<team>/cdn-cgi/access/certs`, matching issuer and audience, unexpired).
