@@ -1,0 +1,56 @@
+name = "smith-wiki-cards-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+routes = [
+  { pattern = "cards-mcp.smith.wiki", custom_domain = true },
+]
+
+[triggers]
+# Index Cards and Blog posts that reached the repositories without passing through create_card.
+crons = ["*/15 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "smith-wiki-cards"
+database_id = "00000000-0000-0000-0000-000000000000" # replace with the id printed by `wrangler d1 create`
+migrations_dir = "migrations"
+
+[[vectorize]]
+binding = "VECTORS"
+index_name = "smith-wiki-cards" # 1024 dimensions, cosine; metadata index on `author`
+
+[ai]
+binding = "AI"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "smith-wiki-cards"
+
+[images]
+binding = "IMAGES"
+
+[vars]
+CARDS_REPO = "smith-wiki/cards"
+CARDS_BRANCH = "main"
+CARD_SITE_URL = "https://cards.smith.wiki"
+FILES_BASE_URL = "https://cards-files.smith.wiki"
+BLOG_REPO = "andysmith-ai/andysmith.ai"
+BLOG_BRANCH = "main"
+BLOG_SITE_URL = "https://andysmith.ai"
+# Bluesky DIDs of the two authors (did:plc:...). Required before deploy.
+AGENT_DID = ""
+OPERATOR_DID = ""
+# Cloudflare Access: team domain (e.g. "example.cloudflareaccess.com") and the
+# Application Audience (AUD) tag of the cards-mcp.smith.wiki Access application.
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""
+
+# Runtime secrets (`wrangler secret put <NAME>`):
+#   GITHUB_TOKEN  fine-grained token: contents read/write on smith-wiki/cards,
+#                 contents read on andysmith-ai/andysmith.ai
+#
+# Local development only (put in .dev.vars, never in production):
+#   DEV_AUTH_BYPASS = "1"  skips the Cf-Access-Jwt-Assertion check for `wrangler dev`
