@@ -65,7 +65,7 @@ Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitH
      -d '{"name":"smith-wiki-cards","config":{"dimensions":1024,"metric":"cosine"}}'
    ```
 3. **Worker** — Workers & Pages → Create → Import a repository → `smith-wiki/cards-mcp`. The
-   Worker name must be `smith-wiki-cards-mcp`; build command empty; deploy command
+   Worker name must be `cards-mcp`; build command empty; deploy command
    `npx wrangler deploy`. The first deploy creates the D1 database `smith-wiki-cards`, the custom
    domain `cards-mcp.smith.wiki`, and the 15-minute cron; the Worker creates its own tables.
 4. **Secret** — Worker → Settings → Variables and Secrets: `GITHUB_TOKEN` (secret),

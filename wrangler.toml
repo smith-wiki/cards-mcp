@@ -1,4 +1,4 @@
-name = "smith-wiki-cards-mcp"
+name = "cards-mcp"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
