@@ -62,8 +62,8 @@ Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitH
    `npx wrangler deploy`. The first deploy creates the D1 database `smith-wiki-cards`, the custom
    domain `cards-mcp.smith.wiki`, and the 15-minute cron; the Worker creates its own tables.
 4. **Secret** — Worker → Settings → Variables and Secrets: `GITHUB_TOKEN` (secret),
-   fine-grained token with contents read/write on `smith-wiki/cards` and read on
-   `andysmith-ai/andysmith.ai`.
+   fine-grained token, resource owner `smith-wiki`, contents read/write on `smith-wiki/cards`
+   only (the blog repo is public and readable without a grant).
 5. **Cloudflare Access** — Zero Trust → Access → Applications → add an **MCP server** application
    for `cards-mcp.smith.wiki`:
    - one Allow policy whose only include rule is the Operator's email address;
