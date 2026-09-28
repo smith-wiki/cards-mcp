@@ -7,7 +7,7 @@ recorded in [docs/adr/0001](docs/adr/0001-git-cards-cloudflare-index.md).
 - **Writes** a Card as `cards/<id>/index.md` (plus `article.md`) in one commit to
   `smith-wiki/cards` through the GitHub Git Data API. That repository is the source of truth; its
   CI builds the Card site and publishes the Card to Bluesky once the page is live.
-- **Stores images** in the public R2 bucket `smith-wiki-cards` (`https://cards-files.smith.wiki/<sha256>.<ext>`),
+- **Stores images** in the public R2 bucket `smith-wiki` (`https://files.smith.wiki/cards/<sha256>.<ext>`),
   shrunk to at most 1,000,000 bytes.
 - **Indexes** every Card in D1 (rows) and Vectorize (Workers AI `@cf/baai/bge-m3` embeddings of
   the Short text and the full text). The index is derived and append-only; a cron trigger every
@@ -53,10 +53,17 @@ only work against deployed resources.
 Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitHub
 (`smith-wiki/cards-mcp`, branch `main`) with `npx wrangler deploy`.
 
-1. **R2** — create bucket `smith-wiki-cards`; under Settings → Custom Domains connect
-   `cards-files.smith.wiki`.
-2. **Vectorize** — create index `smith-wiki-cards`: 1024 dimensions, cosine. Authors are
-   Vectorize namespaces, so no metadata index is needed.
+1. **R2** — bucket `smith-wiki`; under Settings → Custom Domains connect
+   `files.smith.wiki`. Card images live under `cards/`.
+2. **Vectorize** — index `smith-wiki-cards`: 1024 dimensions, cosine. Authors are Vectorize
+   namespaces, so no metadata index is needed. The dashboard cannot create indexes; use the API
+   with a token that has *Account → Vectorize → Edit*:
+
+   ```sh
+   curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/vectorize/v2/indexes" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+     -d '{"name":"smith-wiki-cards","config":{"dimensions":1024,"metric":"cosine"}}'
+   ```
 3. **Worker** — Workers & Pages → Create → Import a repository → `smith-wiki/cards-mcp`. The
    Worker name must be `smith-wiki-cards-mcp`; build command empty; deploy command
    `npx wrangler deploy`. The first deploy creates the D1 database `smith-wiki-cards`, the custom

@@ -56,7 +56,8 @@ export async function storeImage(env: Env, url: string): Promise<StoredImage> {
     bytes = await toJpeg(env, url, bytes);
     mime = "image/jpeg";
   }
-  const key = `${await sha256Hex(bytes)}.${EXTENSIONS[mime]}`;
+  // Keys live under `cards/`: the bucket is shared by future wiki iterations.
+  const key = `cards/${await sha256Hex(bytes)}.${EXTENSIONS[mime]}`;
   if (!(await env.FILES.head(key))) {
     await env.FILES.put(key, bytes, { httpMetadata: { contentType: mime } });
   }

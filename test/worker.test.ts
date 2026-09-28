@@ -129,7 +129,7 @@ describe("MCP over the Worker fetch handler", () => {
     // Shrunk through the JPEG quality ladder until at most 1,000,000 bytes, stored once by hash.
     expect(fakes.transcodes).toEqual([85, 75, 65, 55, 45]);
     const [key] = [...fakes.files.keys()];
-    expect(key).toMatch(/^[0-9a-f]{64}\.jpg$/);
+    expect(key).toMatch(/^cards\/[0-9a-f]{64}\.jpg$/);
     expect(fakes.files.get(key)?.contentType).toBe("image/jpeg");
 
     expect(repo.commits).toHaveLength(1);
@@ -144,7 +144,7 @@ parent:
   url: https://andysmith.ai/2025/Sep/7/on-cards/
   text: "Cards beat pages."
 images:
-  - src: https://cards-files.smith.wiki/${key}
+  - src: https://files.smith.wiki/${key}
     alt: "Reading time chart"
     mime: image/jpeg
 ---

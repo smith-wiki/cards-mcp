@@ -115,7 +115,7 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
     CARDS_REPO: "smith-wiki/cards",
     CARDS_BRANCH: "main",
     CARD_SITE_URL: "https://cards.smith.wiki",
-    FILES_BASE_URL: "https://cards-files.smith.wiki",
+    FILES_BASE_URL: "https://files.smith.wiki",
     BLOG_REPO: "andysmith-ai/andysmith.ai",
     BLOG_BRANCH: "main",
     BLOG_SITE_URL: "https://andysmith.ai",

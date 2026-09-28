@@ -18,7 +18,7 @@ describe("Card files", () => {
       parent: PARENT,
       attachment: {
         type: "images",
-        images: [{ src: "https://cards-files.smith.wiki/ab12.jpg", alt: "A chart\nof growth", mime: "image/jpeg" }],
+        images: [{ src: "https://files.smith.wiki/cards/ab12.jpg", alt: "A chart\nof growth", mime: "image/jpeg" }],
       },
       body: "Because of [the earlier finding](https://cards.smith.wiki/3m5xh2abcdefg/).",
     });
@@ -33,7 +33,7 @@ parent:
   url: https://cards.smith.wiki/3m5xj2abcdefg/
   text: "The Operator asked: \\"why?\\""
 images:
-  - src: https://cards-files.smith.wiki/ab12.jpg
+  - src: https://files.smith.wiki/cards/ab12.jpg
     alt: "A chart\\nof growth"
     mime: image/jpeg
 ---
