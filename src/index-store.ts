@@ -49,9 +49,11 @@ async function embed(env: Env, texts: string[]): Promise<number[][]> {
 export async function indexCard(env: Env, card: IndexedCard): Promise<void> {
   const texts = card.full_text ? [card.short_text, card.full_text] : [card.short_text];
   const [shortVector, fullVector] = await embed(env, texts);
+  // The author is the Vectorize namespace, so the author filter needs no metadata index.
   const metadata = { id: card.id, author: card.author };
-  const vectors: VectorizeVector[] = [{ id: `${card.id}#short`, values: shortVector, metadata }];
-  if (fullVector) vectors.push({ id: `${card.id}#full`, values: fullVector, metadata });
+  const namespace = card.author;
+  const vectors: VectorizeVector[] = [{ id: `${card.id}#short`, values: shortVector, metadata, namespace }];
+  if (fullVector) vectors.push({ id: `${card.id}#full`, values: fullVector, metadata, namespace });
   await env.VECTORS.insert(vectors);
   await env.DB.prepare(INSERT_SQL)
     .bind(...COLUMNS.map((column) => card[column]))
@@ -106,7 +108,7 @@ export async function searchCards(
   const matches = await env.VECTORS.query(vector, {
     // Each Card has up to two vectors; over-fetch so dedupe still fills the limit.
     topK: Math.min(100, limit * 2),
-    ...(author ? { filter: { author: { $eq: author } } } : {}),
+    ...(author ? { namespace: author } : {}),
   });
   const best = new Map<string, number>();
   for (const match of matches.matches) {

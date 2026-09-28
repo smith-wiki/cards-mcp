@@ -3,6 +3,8 @@ main = "src/index.ts"
 compatibility_date = "2026-09-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = false
+# Variables set in the dashboard (ACCESS_TEAM_DOMAIN, ACCESS_AUD) survive deploys.
+keep_vars = true
 
 routes = [
   { pattern = "cards-mcp.smith.wiki", custom_domain = true },
@@ -12,15 +14,15 @@ routes = [
 # Index Cards and Blog posts that reached the repositories without passing through create_card.
 crons = ["*/15 * * * *"]
 
+# No database_id: the first deploy creates the database and keeps it bound.
+# The Worker creates its tables itself (src/schema.ts); no migration step.
 [[d1_databases]]
 binding = "DB"
 database_name = "smith-wiki-cards"
-database_id = "00000000-0000-0000-0000-000000000000" # replace with the id printed by `wrangler d1 create`
-migrations_dir = "migrations"
 
 [[vectorize]]
 binding = "VECTORS"
-index_name = "smith-wiki-cards" # 1024 dimensions, cosine; metadata index on `author`
+index_name = "smith-wiki-cards" # 1024 dimensions, cosine; authors are namespaces, no metadata index
 
 [ai]
 binding = "AI"
@@ -40,17 +42,16 @@ FILES_BASE_URL = "https://cards-files.smith.wiki"
 BLOG_REPO = "andysmith-ai/andysmith.ai"
 BLOG_BRANCH = "main"
 BLOG_SITE_URL = "https://andysmith.ai"
-# Bluesky DIDs of the two authors (did:plc:...). Required before deploy.
-AGENT_DID = ""
-OPERATOR_DID = ""
-# Cloudflare Access: team domain (e.g. "example.cloudflareaccess.com") and the
-# Application Audience (AUD) tag of the cards-mcp.smith.wiki Access application.
-ACCESS_TEAM_DOMAIN = ""
-ACCESS_AUD = ""
+# The wiki starts from zero: blog Cards announced before this time are never indexed.
+BLOG_SINCE = "2026-09-28T00:00:00Z"
+AGENT_DID = "did:plc:d5v65aamjwvjv5hfgpty5c67"    # smith.wiki
+OPERATOR_DID = "did:plc:zn65gh5rul6g53vapd5li5kr" # andysmith.ai
 
-# Runtime secrets (`wrangler secret put <NAME>`):
-#   GITHUB_TOKEN  fine-grained token: contents read/write on smith-wiki/cards,
-#                 contents read on andysmith-ai/andysmith.ai
+# Set in the dashboard (Settings -> Variables and Secrets), not here:
+#   ACCESS_TEAM_DOMAIN  text    e.g. "example.cloudflareaccess.com"
+#   ACCESS_AUD          text    Application Audience (AUD) tag of the cards-mcp.smith.wiki Access app
+#   GITHUB_TOKEN        secret  fine-grained token: contents read/write on smith-wiki/cards,
+#                               contents read on andysmith-ai/andysmith.ai
 #
 # Local development only (put in .dev.vars, never in production):
 #   DEV_AUTH_BYPASS = "1"  skips the Cf-Access-Jwt-Assertion check for `wrangler dev`

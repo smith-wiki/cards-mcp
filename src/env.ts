@@ -12,6 +12,8 @@ export interface Env {
   BLOG_REPO: string;
   BLOG_BRANCH: string;
   BLOG_SITE_URL: string;
+  /** ISO time; only blog Cards created at or after it are indexed (the wiki starts from zero). */
+  BLOG_SINCE: string;
   AGENT_DID: string;
   OPERATOR_DID: string;
   ACCESS_TEAM_DOMAIN: string;

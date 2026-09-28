@@ -7,7 +7,6 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "migrate": "wrangler d1 migrations apply smith-wiki-cards --remote",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc --noEmit"

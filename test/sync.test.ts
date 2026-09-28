@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderCardFiles } from "../src/card-file";
 import { getCards } from "../src/index-store";
 import { sync } from "../src/sync";
+import { tidCreated } from "../src/tid";
 import { FakeRepo, fakeFetch, makeEnv } from "./fakes";
 
 afterEach(() => {
@@ -63,5 +64,21 @@ describe("scheduled sync", () => {
       "/repos/smith-wiki/cards/git/trees/main",
       "/repos/andysmith-ai/andysmith.ai/git/trees/main",
     ]);
+  });
+
+  it("ignores blog posts announced before BLOG_SINCE", async () => {
+    const since = new Date(Date.parse(tidCreated(BLOG_ID)) + 1).toISOString();
+    const { env, vectors } = makeEnv({ BLOG_SINCE: since });
+    const blog = new FakeRepo("andysmith-ai/andysmith.ai", {
+      "src/2026/Sep/7/on-cards/index.md": "---\ntitle: On cards\nannouncements:\n  bluesky: Cards beat pages.\n---\nThe post.\n",
+      "src/2026/Sep/7/on-cards/bluesky.json": JSON.stringify({
+        status: "published",
+        post: { uri: `at://did:plc:operator/app.bsky.feed.post/${BLOG_ID}`, cid: "c", url: "u" },
+      }),
+    });
+    vi.stubGlobal("fetch", fakeFetch([new FakeRepo("smith-wiki/cards", {}), blog]));
+
+    expect(await sync(env)).toEqual({ cards: 0, blog: 0, failures: [] });
+    expect(vectors.size).toBe(0);
   });
 });

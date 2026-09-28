@@ -1,14 +1,12 @@
 // In-memory stand-ins for the Worker's bindings and GitHub, for tests only.
-import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import type { Env } from "../src/env";
+import { SCHEMA } from "../src/schema";
 
-const MIGRATION = readFileSync(new URL("../migrations/0001_cards.sql", import.meta.url), "utf8");
-
-/** D1 subset backed by a real SQLite database with the real migration applied. */
+/** D1 subset backed by a real SQLite database with the real schema applied. */
 function fakeD1(): D1Database {
   const db = new DatabaseSync(":memory:");
-  db.exec(MIGRATION);
+  for (const sql of SCHEMA) db.exec(sql);
   const statement = (sql: string, params: unknown[] = []) => ({
     bind: (...values: unknown[]) => statement(sql, values),
     async all() {
@@ -22,7 +20,14 @@ function fakeD1(): D1Database {
       return { results: [], success: true, meta: {} };
     },
   });
-  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
+  return {
+    prepare: (sql: string) => statement(sql),
+    async batch(statements: { run(): Promise<unknown> }[]) {
+      const results = [];
+      for (const s of statements) results.push(await s.run());
+      return results;
+    },
+  } as unknown as D1Database;
 }
 
 const DIMENSIONS = 64;
@@ -57,9 +62,8 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
       return { mutationId: "m" };
     },
     async query(query: number[], options: VectorizeQueryOptions = {}) {
-      const author = (options.filter?.author as { $eq?: string } | undefined)?.$eq;
       const matches = [...vectors.values()]
-        .filter((item) => !author || item.metadata?.author === author)
+        .filter((item) => !options.namespace || item.namespace === options.namespace)
         .map((item) => ({
           id: item.id,
           score: (item.values as number[]).reduce((sum, value, i) => sum + value * query[i], 0),
@@ -115,6 +119,7 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
     BLOG_REPO: "andysmith-ai/andysmith.ai",
     BLOG_BRANCH: "main",
     BLOG_SITE_URL: "https://andysmith.ai",
+    BLOG_SINCE: "2000-01-01T00:00:00Z",
     AGENT_DID: "did:plc:agent",
     OPERATOR_DID: "did:plc:operator",
     ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",

@@ -1,6 +1,7 @@
 // Scheduled sync: indexes Cards that reached the repositories without passing through
 // create_card (or whose indexing failed after the commit). Idempotent.
 import { BLOG_POST_PATH, blogCard, publishedPost } from "./blog";
+import { tidCreated } from "./tid";
 import { cardFromFiles } from "./card-file";
 import type { Env } from "./env";
 import { GitHub, type TreeEntry } from "./github";
@@ -62,7 +63,7 @@ async function syncBlogRepo(env: Env, report: SyncReport): Promise<void> {
     try {
       const published = publishedPost(await github.blobText(post.receiptSha));
       let cardId: string | null = null;
-      if (published) {
+      if (published && Date.parse(tidCreated(published.id)) >= Date.parse(env.BLOG_SINCE)) {
         const card = blogCard(post.path, await github.blobText(post.sha), published, env.BLOG_SITE_URL);
         if (card) {
           if (!(await existingIds(env, [card.id])).has(card.id)) {

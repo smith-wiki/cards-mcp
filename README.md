@@ -50,54 +50,29 @@ only work against deployed resources.
 
 ## Provisioning
 
-All commands run inside `nix develop`.
+Everything is done in the Cloudflare dashboard; Workers Builds deploys from GitHub
+(`smith-wiki/cards-mcp`, branch `main`) with `npx wrangler deploy`.
 
-1. **D1** — create the database, put the printed id into `wrangler.toml` (`database_id`), and apply
-   the migration:
-
-   ```sh
-   npx wrangler d1 create smith-wiki-cards
-   npm run migrate
-   ```
-
-2. **Vectorize** — 1024 dimensions (bge-m3), cosine, with a metadata index for the author filter:
-
-   ```sh
-   npx wrangler vectorize create smith-wiki-cards --dimensions=1024 --metric=cosine
-   npx wrangler vectorize create-metadata-index smith-wiki-cards --property-name author --type string
-   ```
-
-3. **R2** — create the bucket and connect the public custom domain:
-
-   ```sh
-   npx wrangler r2 bucket create smith-wiki-cards
-   npx wrangler r2 bucket domain add smith-wiki-cards --domain cards-files.smith.wiki --zone-id <smith.wiki zone id>
-   ```
-
-4. **Workers AI and Images** need no setup beyond the bindings in `wrangler.toml`.
-
-5. **Vars and secrets** — set `AGENT_DID` and `OPERATOR_DID` (the two Bluesky DIDs) in
-   `wrangler.toml`, then the GitHub token (fine-grained: contents read/write on `smith-wiki/cards`,
-   contents read on `andysmith-ai/andysmith.ai`):
-
-   ```sh
-   npx wrangler secret put GITHUB_TOKEN
-   ```
-
-6. **Cloudflare Access** — in Zero Trust → Access → Applications, add an **MCP server**
-   application for `cards-mcp.smith.wiki`:
-   - enable Managed OAuth and allow dynamic client registration, with the allowed redirect URI
-     `https://chatgpt.com/connector_platform_oauth_redirect`;
+1. **R2** — create bucket `smith-wiki-cards`; under Settings → Custom Domains connect
+   `cards-files.smith.wiki`.
+2. **Vectorize** — create index `smith-wiki-cards`: 1024 dimensions, cosine. Authors are
+   Vectorize namespaces, so no metadata index is needed.
+3. **Worker** — Workers & Pages → Create → Import a repository → `smith-wiki/cards-mcp`. The
+   Worker name must be `smith-wiki-cards-mcp`; build command empty; deploy command
+   `npx wrangler deploy`. The first deploy creates the D1 database `smith-wiki-cards`, the custom
+   domain `cards-mcp.smith.wiki`, and the 15-minute cron; the Worker creates its own tables.
+4. **Secret** — Worker → Settings → Variables and Secrets: `GITHUB_TOKEN` (secret),
+   fine-grained token with contents read/write on `smith-wiki/cards` and read on
+   `andysmith-ai/andysmith.ai`.
+5. **Cloudflare Access** — Zero Trust → Access → Applications → add an **MCP server** application
+   for `cards-mcp.smith.wiki`:
    - one Allow policy whose only include rule is the Operator's email address;
-   - copy the team domain (`<team>.cloudflareaccess.com`) into `ACCESS_TEAM_DOMAIN` and the
-     application's AUD tag into `ACCESS_AUD`.
+   - Advanced settings: turn on Managed OAuth and dynamic client registration with the allowed
+     redirect URI `https://chatgpt.com/connector_platform_oauth_redirect`;
+   - then set on the Worker (text variables): `ACCESS_TEAM_DOMAIN` = `<team>.cloudflareaccess.com`,
+     `ACCESS_AUD` = the application's AUD tag. `keep_vars = true` keeps them across deploys.
 
-   The Worker rejects any `/mcp` request without a valid `Cf-Access-Jwt-Assertion` (RS256, keys
-   from `https://<team>/cdn-cgi/access/certs`, matching issuer and audience, unexpired) with 401.
-
-7. **Deploy** — `npm run deploy`. The custom domain route `cards-mcp.smith.wiki` and the
-   15-minute cron trigger come from `wrangler.toml`.
-
-8. **ChatGPT** — enable Developer Mode (Settings → Apps & Connectors → Advanced), create a
-   connector with URL `https://cards-mcp.smith.wiki/mcp` and OAuth authentication, and sign in
-   through Access as the Operator.
+   Until both are set every `/mcp` request gets 401. The Worker checks `Cf-Access-Jwt-Assertion`
+   (RS256, keys from `https://<team>/cdn-cgi/access/certs`, matching issuer and audience, unexpired).
+6. **ChatGPT** — Developer Mode (Settings → Apps & Connectors → Advanced), new connector
+   `https://cards-mcp.smith.wiki/mcp` with OAuth, sign in through Access as the Operator.
