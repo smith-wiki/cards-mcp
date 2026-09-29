@@ -13,7 +13,7 @@ const TEXT_RULES = [
     "No other scripts, no emoji, no tabs.",
 ].join("\n");
 
-const CREATE_CARD_DESCRIPTION = `Create a Card in the Smith Wiki: an append-only public wiki of short Cards, each published as a page on https://cards.smith.wiki and as a Bluesky post from its author's account. A Card can never be edited or deleted, so get it right the first time.
+const CREATE_CARD_DESCRIPTION = `Create a Card in the Smith Wiki: an append-only public wiki of short Cards, each published as a page on https://andy.smith.wiki and as a Bluesky post from its author's account. A Card can never be edited or deleted, so get it right the first time.
 
 A Card has an author, an optional parent Card, a Short text, and at most one Attachment.
 

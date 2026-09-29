@@ -1,6 +1,6 @@
 // Derived index of Cards: D1 rows plus Vectorize embeddings. Rebuildable from the
 // repositories; only ever appended to.
-import { blueskyUrl, type Author, type Env } from "./env";
+import { blueskyUrl, cardPageUrl, type Author, type Env } from "./env";
 
 export const EMBEDDING_MODEL = "@cf/baai/bge-m3";
 
@@ -74,7 +74,12 @@ export async function loadCards(env: Env, ids: string[]): Promise<Map<string, In
     )
       .bind(...chunk)
       .all<IndexedCard>();
-    for (const row of results) found.set(row.id, row);
+    for (const row of results) {
+      // Rows are never updated and keep the host they were indexed under
+      // (cards.smith.wiki before the move); a Card page lives on the current host.
+      if (row.source === "cards") row.url = cardPageUrl(env, row.id);
+      found.set(row.id, row);
+    }
   }
   return found;
 }

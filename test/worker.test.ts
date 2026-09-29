@@ -74,6 +74,7 @@ async function seedParents(env: Env): Promise<void> {
     short_text: "Short units get read.",
     short_markdown: "Short units get read.",
     full_text: null,
+    // Indexed before the site moved; new Cards must still link to the current host.
     url: `https://cards.smith.wiki/${AGENT_CARD}/`,
     bluesky_uri: `at://did:plc:agent/app.bsky.feed.post/${AGENT_CARD}`,
     parent_id: null,
@@ -121,7 +122,7 @@ describe("MCP over the Worker fetch handler", () => {
     const id = result.structuredContent.id;
     expect(result.structuredContent).toEqual({
       id,
-      page_url: `https://cards.smith.wiki/${id}/`,
+      page_url: `https://andy.smith.wiki/${id}/`,
       bluesky_url: `https://bsky.app/profile/did:plc:operator/post/${id}`,
       status: "pending",
     });
@@ -148,7 +149,7 @@ images:
     alt: "Reading time chart"
     mime: image/jpeg
 ---
-Agreed, and [short units get read](https://cards.smith.wiki/${AGENT_CARD}/).
+Agreed, and [short units get read](https://andy.smith.wiki/${AGENT_CARD}/).
 `);
 
     // Indexed: the new Card is a reply of its parent and findable by meaning.

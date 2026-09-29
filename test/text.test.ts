@@ -60,7 +60,7 @@ describe("Short text", () => {
     const parsed = parseShortText(`  Builds on [the earlier finding](card:${ID}).\n`);
     expect(parsed.problems).toEqual([]);
     expect(parsed.plain).toBe("Builds on the earlier finding.");
-    const urls = new Map([[ID, `https://cards.smith.wiki/${ID}/`]]);
-    expect(resolveShortText(parsed, urls)).toBe(`Builds on [the earlier finding](https://cards.smith.wiki/${ID}/).`);
+    const urls = new Map([[ID, `https://andy.smith.wiki/${ID}/`]]);
+    expect(resolveShortText(parsed, urls)).toBe(`Builds on [the earlier finding](https://andy.smith.wiki/${ID}/).`);
   });
 });

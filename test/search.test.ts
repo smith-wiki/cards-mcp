@@ -11,7 +11,7 @@ function card(id: string, author: IndexedCard["author"], text: string): IndexedC
     short_text: text,
     short_markdown: text,
     full_text: null,
-    url: `https://cards.smith.wiki/${id}/`,
+    url: `https://andy.smith.wiki/${id}/`,
     bluesky_uri: `at://did:plc:${author}/app.bsky.feed.post/${id}`,
     parent_id: null,
     parent_text: null,
