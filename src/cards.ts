@@ -1,22 +1,35 @@
-// create_card: validation, resolution, image storage, commit, and indexing.
+// create_card: validation, resolution, file storage, commit, and indexing.
 import { renderCardFiles, type CardAttachment, type CardParent } from "./card-file";
 import { authorDid, blueskyUrl, cardPageUrl, postUri, type Author, type Env } from "./env";
+import { storeHtml, storeVideo, type FileSource } from "./files";
 import { GitHub } from "./github";
 import { storeImage } from "./images";
 import { indexCard, loadCards } from "./index-store";
 import { characterProblems, normalizeNewlines, parseShortText, resolveShortText, type ParsedShortText } from "./text";
 import { TID_PATTERN, generateTid, tidCreated } from "./tid";
 
+/** A file ChatGPT attaches to the call (Apps SDK `openai/fileParams`); its URL is temporary. */
+export interface FileInput {
+  download_url: string;
+  file_id: string;
+  mime_type?: string;
+  file_name?: string;
+}
+
 export type AttachmentInput =
-  | { type: "images"; images: { url: string; alt: string }[] }
+  | { type: "images"; images: { url?: string | null; alt: string }[] }
   | { type: "link"; url: string; title?: string | null; description?: string | null }
-  | { type: "article"; markdown: string };
+  | { type: "article"; markdown: string }
+  | { type: "video"; url?: string | null; alt: string }
+  | { type: "html"; url?: string | null; title: string; description?: string | null };
 
 export interface CreateCardInput {
   author: Author;
   parent_id?: string | null;
   short_text: string;
   attachment?: AttachmentInput | null;
+  /** Files for the Attachment's file slots without a url, in order. */
+  files?: FileInput[] | null;
 }
 
 export interface CreateCardResult {
@@ -34,6 +47,8 @@ export class CardInputError extends Error {
 }
 
 export const MAX_IMAGES = 4;
+/** `app.bsky.embed.video` alt text limit, in graphemes. */
+export const VIDEO_ALT_MAX = 1000;
 
 function httpUrl(value: string): URL | null {
   if (/\s/.test(value)) return null;
@@ -54,10 +69,26 @@ function optionalText(field: string, value: string | null | undefined, problems:
   return text;
 }
 
-/** Attachment ready for the Card file, except images still at their source URLs. */
+/** Required free-text field, checked like any text. */
+function requiredText(field: string, value: string, missing: string, problems: string[]): string {
+  const text = normalizeNewlines(value).trim();
+  if (!text) problems.push(`${field}: ${missing}`);
+  problems.push(...characterProblems(field, text));
+  return text;
+}
+
+/** Where one Attachment file comes from, and the field its problems are reported under. */
+interface SourcedFile {
+  source: FileSource;
+  field: string;
+}
+
+/** Attachment ready for the Card file, except files still at their sources. */
 export type ValidatedAttachment =
-  | Exclude<CardAttachment, { type: "images" }>
-  | { type: "images"; images: { url: string; alt: string }[] };
+  | Exclude<CardAttachment, { type: "images" | "video" | "html" }>
+  | { type: "images"; images: { file: SourcedFile; alt: string }[] }
+  | { type: "video"; file: SourcedFile; alt: string }
+  | { type: "html"; file: SourcedFile; title: string; description?: string };
 
 export interface ValidatedCard {
   author: Author;
@@ -80,6 +111,28 @@ export function validateCardInput(input: CreateCardInput): { card: ValidatedCard
     problems.push("parent_id: Operator Cards must reply to an existing Card; give parent_id");
   }
 
+  const files = input.files ?? [];
+  let filesUsed = 0;
+  // A file slot (an image, the video, the HTML page) takes its url, else the next attached file.
+  const fileFor = (field: string, url: string | null | undefined, kind: string): SourcedFile => {
+    if (url !== null && url !== undefined) {
+      if (!httpUrl(url)) problems.push(`${field}: "${url}" is not an http(s) URL`);
+      return { field, source: { url, what: `${kind} ${url}` } };
+    }
+    const index = filesUsed++;
+    const file = files[index];
+    if (!file) {
+      problems.push(`${field}: give a url, or attach the file in files`);
+      return { field, source: { url: "", what: kind } };
+    }
+    const label = `files[${index}]`;
+    if (!httpUrl(file.download_url)) problems.push(`${label}.download_url: not an http(s) URL`);
+    return {
+      field: label,
+      source: { url: file.download_url, what: `${kind} file "${file.file_name ?? file.file_id}"`, mime: file.mime_type, name: file.file_name },
+    };
+  };
+
   let attachment: ValidatedAttachment | undefined;
   const raw = input.attachment ?? undefined;
   if (raw?.type === "images") {
@@ -88,11 +141,9 @@ export function validateCardInput(input: CreateCardInput): { card: ValidatedCard
     }
     const images = raw.images.map((image, index) => {
       const field = `attachment.images[${index}]`;
-      if (!httpUrl(image.url)) problems.push(`${field}.url: "${image.url}" is not an http(s) URL`);
-      const alt = normalizeNewlines(image.alt).trim();
-      if (!alt) problems.push(`${field}.alt: alt text is required (describe the image in English)`);
-      problems.push(...characterProblems(`${field}.alt`, alt));
-      return { url: image.url, alt };
+      const file = fileFor(`${field}.url`, image.url, "image");
+      const alt = requiredText(`${field}.alt`, image.alt, "alt text is required (describe the image in English)", problems);
+      return { file, alt };
     });
     attachment = { type: "images", images };
   } else if (raw?.type === "link") {
@@ -114,18 +165,44 @@ export function validateCardInput(input: CreateCardInput): { card: ValidatedCard
     if (!markdown) problems.push("attachment.markdown: the Article must not be empty");
     problems.push(...characterProblems("attachment.markdown", markdown));
     attachment = { type: "article", markdown };
+  } else if (raw?.type === "video") {
+    const file = fileFor("attachment.url", raw.url, "video");
+    const alt = requiredText("attachment.alt", raw.alt, "alt text is required (describe the video in English)", problems);
+    const graphemes = Array.from(new Intl.Segmenter("en", { granularity: "grapheme" }).segment(alt)).length;
+    if (graphemes > VIDEO_ALT_MAX) problems.push(`attachment.alt: ${graphemes} characters; Bluesky allows ${VIDEO_ALT_MAX}`);
+    attachment = { type: "video", file, alt };
+  } else if (raw?.type === "html") {
+    const file = fileFor("attachment.url", raw.url, "HTML page");
+    const title = requiredText("attachment.title", raw.title, "a title is required", problems);
+    const description = optionalText("attachment.description", raw.description, problems);
+    attachment = { type: "html", file, title, ...(description !== undefined ? { description } : {}) };
+  }
+  if (filesUsed < files.length) {
+    problems.push(
+      `files: ${files.length} attached, but the attachment takes ${filesUsed}; leave out the url of one image, the video, or the HTML page for each file`,
+    );
   }
 
   return { card: { author: input.author, parentId, shortText, attachment }, problems };
 }
 
-async function storeImages(env: Env, attachment: ValidatedAttachment | undefined): Promise<CardAttachment | undefined> {
+/** Copies every file the Attachment names into R2; problems are the Agent's to fix. */
+async function storeFiles(env: Env, attachment: ValidatedAttachment | undefined): Promise<CardAttachment | undefined> {
+  const problem = (file: SourcedFile, error: unknown) => `${file.field}: ${error instanceof Error ? error.message : String(error)}`;
+  if (attachment?.type === "video" || attachment?.type === "html") {
+    const { file, ...rest } = attachment;
+    try {
+      return rest.type === "video"
+        ? { type: "video", ...(await storeVideo(env, file.source)), alt: rest.alt }
+        : { ...rest, src: await storeHtml(env, file.source) };
+    } catch (error) {
+      throw new CardInputError([problem(file, error)]);
+    }
+  }
   if (attachment?.type !== "images") return attachment;
-  const results = await Promise.allSettled(attachment.images.map((image) => storeImage(env, image.url)));
+  const results = await Promise.allSettled(attachment.images.map((image) => storeImage(env, image.file.source)));
   const problems = results.flatMap((result, index) =>
-    result.status === "rejected"
-      ? [`attachment.images[${index}].url: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`]
-      : [],
+    result.status === "rejected" ? [problem(attachment.images[index].file, result.reason)] : [],
   );
   if (problems.length) throw new CardInputError(problems);
   return {
@@ -154,7 +231,7 @@ export async function createCard(env: Env, input: CreateCardInput): Promise<Crea
   }
   if (problems.length) throw new CardInputError(problems);
 
-  const attachment = await storeImages(env, card.attachment);
+  const attachment = await storeFiles(env, card.attachment);
   const urls = new Map([...known.values()].map((row) => [row.id, row.url]));
   const body = resolveShortText(card.shortText, urls);
 

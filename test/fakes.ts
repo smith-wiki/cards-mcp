@@ -85,10 +85,27 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
     async head(key: string) {
       return files.has(key) ? { key } : null;
     },
-    async put(key: string, value: Uint8Array, options?: R2PutOptions) {
+    async put(key: string, value: Uint8Array | ReadableStream, options?: R2PutOptions) {
       const metadata = options?.httpMetadata as R2HTTPMetadata | undefined;
-      files.set(key, { bytes: new Uint8Array(value), contentType: metadata?.contentType });
+      const bytes = value instanceof ReadableStream ? new Uint8Array(await new Response(value).arrayBuffer()) : new Uint8Array(value);
+      files.set(key, { bytes, contentType: metadata?.contentType });
       return { key };
+    },
+    async createMultipartUpload(key: string, options?: R2MultipartOptions) {
+      const parts = new Map<number, Uint8Array>();
+      return {
+        async uploadPart(partNumber: number, value: ArrayBuffer) {
+          parts.set(partNumber, new Uint8Array(value));
+          return { partNumber, etag: `etag-${partNumber}` };
+        },
+        async complete(uploaded: R2UploadedPart[]) {
+          const chunks = uploaded.map((part) => parts.get(part.partNumber)!);
+          const metadata = options?.httpMetadata as R2HTTPMetadata | undefined;
+          files.set(key, { bytes: new Uint8Array(await new Blob(chunks).arrayBuffer()), contentType: metadata?.contentType });
+          return { key };
+        },
+        async abort() {},
+      };
     },
   } as unknown as R2Bucket;
 
@@ -129,6 +146,22 @@ export function makeEnv(overrides: Partial<Env> = {}): Fakes {
     ...overrides,
   };
   return { env, vectors, files, transcodes };
+}
+
+/** Workers' FixedLengthStream: passes bytes through and fails when the total differs. */
+export class FakeFixedLengthStream extends TransformStream<Uint8Array, Uint8Array> {
+  constructor(expected: number) {
+    let seen = 0;
+    super({
+      transform(chunk, controller) {
+        seen += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      flush() {
+        if (seen !== expected) throw new Error(`expected ${expected} bytes, got ${seen}`);
+      },
+    });
+  }
 }
 
 /** Request bodies of the Git Data API calls the Worker makes. */

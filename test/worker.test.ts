@@ -4,7 +4,7 @@ import worker from "../src/index";
 import type { Env } from "../src/env";
 import { indexCard } from "../src/index-store";
 import { tidCreated } from "../src/tid";
-import { FakeRepo, fakeFetch, makeEnv } from "./fakes";
+import { FakeFixedLengthStream, FakeRepo, fakeFetch, makeEnv } from "./fakes";
 
 const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
 const BLOG_CARD = "3lxyz2abcdefg";
@@ -188,6 +188,145 @@ Agreed, and [short units get read](https://andy.smith.wiki/${AGENT_CARD}/).
     expect(text).toContain("parent_id: no Card with ID 3kaaa2abcdefg");
     expect(text).toContain("short_text: link to card:3kbbb2abcdefg, but no Card has that ID");
     expect(repo.commits).toEqual([]);
+  });
+
+  it("copies a video and an HTML page into R2 and links the Card files there, never to the source", async () => {
+    const fakes = makeEnv({ DEV_AUTH_BYPASS: "1" });
+    const { env } = fakes;
+    await seedParents(env);
+    const repo = new FakeRepo("smith-wiki/cards");
+    const video = new Uint8Array(4096).fill(3);
+    const page = new TextEncoder().encode("<!doctype html><title>Demo</title><p>Hi</p>");
+    vi.stubGlobal("FixedLengthStream", FakeFixedLengthStream);
+    vi.stubGlobal(
+      "fetch",
+      fakeFetch([repo], {
+        // Temporary signed URLs often answer with a generic type; the extension decides.
+        "https://tmp.example.com/clip.mp4?sig=1": () =>
+          new Response(video, { headers: { "content-type": "application/octet-stream", "content-length": String(video.byteLength) } }),
+        "https://tmp.example.com/demo.html?sig=2": () => new Response(page, { headers: { "content-type": "text/plain; charset=utf-8" } }),
+      }),
+    );
+
+    const create = async (id: number, attachment: unknown) => {
+      const call = await rpc(env, id, "tools/call", {
+        name: "create_card",
+        arguments: { author: "agent", short_text: "A demo.", attachment },
+      });
+      const result = call.message?.result as { isError?: boolean; content: { text: string }[]; structuredContent: { id: string } };
+      expect(result.isError, result.content[0].text).toBeFalsy();
+      return result.structuredContent.id;
+    };
+    const videoCard = await create(1, { type: "video", url: "https://tmp.example.com/clip.mp4?sig=1", alt: "A short demo" });
+    const htmlCard = await create(2, { type: "html", url: "https://tmp.example.com/demo.html?sig=2", title: "Demo page" });
+
+    const videoKey = [...fakes.files.keys()].find((key) => key.endsWith(".mp4"))!;
+    expect(videoKey).toMatch(/^cards\/[0-9a-f-]{36}\.mp4$/);
+    expect(fakes.files.get(videoKey)).toEqual({ bytes: video, contentType: "video/mp4" });
+    const htmlKey = [...fakes.files.keys()].find((key) => key.endsWith(".html"))!;
+    expect(htmlKey).toMatch(/^cards\/[0-9a-f]{64}\.html$/);
+    expect(fakes.files.get(htmlKey)).toEqual({ bytes: page, contentType: "text/html; charset=utf-8" });
+
+    const files = Object.assign({}, ...repo.commits.map((commit) => commit.files)) as Record<string, string>;
+    expect(files[`cards/${videoCard}/index.md`]).toContain(
+      `video:\n  src: https://files.smith.wiki/${videoKey}\n  mime: video/mp4\n  alt: "A short demo"\n---`,
+    );
+    expect(files[`cards/${htmlCard}/index.md`]).toContain(`html:\n  src: https://files.smith.wiki/${htmlKey}\n  title: "Demo page"\n---`);
+  });
+
+  it("refuses files it cannot publish and commits nothing", async () => {
+    const { env } = makeEnv({ DEV_AUTH_BYPASS: "1" });
+    await seedParents(env);
+    const repo = new FakeRepo("smith-wiki/cards");
+    vi.stubGlobal("FixedLengthStream", FakeFixedLengthStream);
+    vi.stubGlobal(
+      "fetch",
+      fakeFetch([repo], {
+        "https://example.com/logo.svg": () => new Response("<svg/>", { headers: { "content-type": "image/svg+xml" } }),
+        "https://example.com/big.mp4": () =>
+          new Response("x", { headers: { "content-type": "video/mp4", "content-length": "100000001" } }),
+      }),
+    );
+    const problem = async (id: number, attachment: unknown) => {
+      const call = await rpc(env, id, "tools/call", { name: "create_card", arguments: { author: "agent", short_text: "Look.", attachment } });
+      const result = call.message?.result as { isError: boolean; content: { text: string }[] };
+      expect(result.isError).toBe(true);
+      return result.content[0].text;
+    };
+
+    expect(await problem(1, { type: "images", images: [{ url: "https://example.com/logo.svg", alt: "Logo" }] })).toContain(
+      "attachment.images[0].url: image https://example.com/logo.svg is an SVG",
+    );
+    expect(await problem(2, { type: "video", url: "https://example.com/big.mp4", alt: "Clip" })).toContain(
+      "is 100000001 bytes; the limit is 100000000",
+    );
+    expect(repo.commits).toEqual([]);
+  });
+
+  it("declares files as an Apps SDK file param and fills url-less file slots from it in order", async () => {
+    const fakes = makeEnv({ DEV_AUTH_BYPASS: "1" });
+    const { env } = fakes;
+    await seedParents(env);
+    const repo = new FakeRepo("smith-wiki/cards");
+    const png = new Uint8Array(2048).fill(5);
+    const video = new Uint8Array(3000).fill(9);
+    vi.stubGlobal(
+      "fetch",
+      fakeFetch([repo], {
+        // ChatGPT download URLs carry no extension and a generic type; the file's mime_type decides.
+        "https://files.oaiusercontent.com/a?sig=1": () => new Response(png, { headers: { "content-type": "application/octet-stream" } }),
+        "https://example.com/b.png": () => new Response(png, { headers: { "content-type": "image/png" } }),
+        // No Content-Length: the video goes up to R2 in parts.
+        "https://files.oaiusercontent.com/v?sig=2": () => new Response(new Blob([video]).stream()),
+      }),
+    );
+
+    const list = await rpc(env, 1, "tools/list", {});
+    const tools = list.message?.result?.tools as { name: string; inputSchema: { properties: Record<string, any> }; _meta?: unknown }[];
+    const createCard = tools.find((tool) => tool.name === "create_card")!;
+    expect(createCard._meta).toEqual({ "openai/fileParams": ["files"] });
+    // ChatGPT's tool scan rejects a file object schema that differs from this.
+    expect(createCard.inputSchema.properties.files.items).toMatchObject({
+      type: "object",
+      properties: { download_url: { type: "string" }, file_id: { type: "string" }, mime_type: { type: "string" }, file_name: { type: "string" } },
+      required: ["download_url", "file_id"],
+      additionalProperties: false,
+    });
+
+    const create = async (id: number, args: Record<string, unknown>) => {
+      const call = await rpc(env, id, "tools/call", { name: "create_card", arguments: { author: "agent", short_text: "Look.", ...args } });
+      return call.message?.result as { isError?: boolean; content: { text: string }[]; structuredContent: { id: string } };
+    };
+    const images = await create(2, {
+      attachment: { type: "images", images: [{ alt: "From ChatGPT" }, { url: "https://example.com/b.png", alt: "From a URL" }] },
+      files: [{ download_url: "https://files.oaiusercontent.com/a?sig=1", file_id: "file_a", mime_type: "image/png" }],
+    });
+    expect(images.isError, images.content[0].text).toBeFalsy();
+    const clip = await create(3, {
+      attachment: { type: "video", alt: "A clip" },
+      files: [{ download_url: "https://files.oaiusercontent.com/v?sig=2", file_id: "file_v", file_name: "clip.mp4" }],
+    });
+    expect(clip.isError, clip.content[0].text).toBeFalsy();
+
+    const pngKey = [...fakes.files.keys()].find((key) => key.endsWith(".png"))!;
+    const videoKey = [...fakes.files.keys()].find((key) => key.endsWith(".mp4"))!;
+    expect(fakes.files.get(videoKey)).toEqual({ bytes: video, contentType: "video/mp4" });
+    const files = Object.assign({}, ...repo.commits.map((commit) => commit.files)) as Record<string, string>;
+    // Both images have the same bytes, so both name the one stored copy.
+    expect(files[`cards/${images.structuredContent.id}/index.md`]).toContain(
+      `images:\n  - src: https://files.smith.wiki/${pngKey}\n    alt: "From ChatGPT"\n    mime: image/png\n  - src: https://files.smith.wiki/${pngKey}\n    alt: "From a URL"`,
+    );
+    expect(files[`cards/${clip.structuredContent.id}/index.md`]).toContain(`src: https://files.smith.wiki/${videoKey}`);
+    expect(Object.values(files).join("\n")).not.toContain("oaiusercontent");
+
+    const unused = await create(4, {
+      attachment: { type: "images", images: [{ url: "https://example.com/b.png", alt: "A" }] },
+      files: [{ download_url: "https://files.oaiusercontent.com/a?sig=1", file_id: "file_a" }],
+    });
+    expect(unused.isError).toBe(true);
+    expect(unused.content[0].text).toContain("files: 1 attached, but the attachment takes 0");
+    const missing = await create(5, { attachment: { type: "video", alt: "A clip" } });
+    expect(missing.content[0].text).toContain("attachment.url: give a url, or attach the file in files");
   });
 });
 

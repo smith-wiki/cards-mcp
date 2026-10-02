@@ -38,8 +38,14 @@ _Avoid_: Body, summary
 
 **Attachment**:
 The one extra item a Card carries, in a shape Bluesky can show: images, a
-Link, or an Article.
+Video, an HTML page, a Link, or an Article. Files are copied into the wiki's
+own storage when the Card is created; the Card never points at their source.
 _Avoid_: Embed, media
+
+**HTML page**:
+An Attachment holding one self-contained web page, shown sandboxed on the
+Card's page; on Bluesky the post previews the Card's page.
+_Avoid_: Embed, widget
 
 **Link**:
 An Attachment pointing to an external URL, shown in Bluesky as a preview. Any

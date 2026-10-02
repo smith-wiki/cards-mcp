@@ -13,7 +13,9 @@ export interface CardParent {
 export type CardAttachment =
   | { type: "link"; url: string; title?: string; description?: string }
   | { type: "images"; images: { src: string; alt: string; mime: string }[] }
-  | { type: "article"; markdown: string };
+  | { type: "article"; markdown: string }
+  | { type: "video"; src: string; mime: string; alt: string }
+  | { type: "html"; src: string; title: string; description?: string };
 
 export interface CardFile {
   id: string;
@@ -52,6 +54,11 @@ export function renderCardFiles(card: CardFile): Record<string, string> {
     }
   } else if (attachment?.type === "article") {
     lines.push("article: true");
+  } else if (attachment?.type === "video") {
+    lines.push("video:", `  src: ${attachment.src}`, `  mime: ${attachment.mime}`, `  alt: ${quoted(attachment.alt)}`);
+  } else if (attachment?.type === "html") {
+    lines.push("html:", `  src: ${attachment.src}`, `  title: ${quoted(attachment.title)}`);
+    if (attachment.description !== undefined) lines.push(`  description: ${quoted(attachment.description)}`);
   }
   lines.push("---", card.body, "");
 
